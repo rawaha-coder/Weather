@@ -5,8 +5,12 @@ import android.content.pm.PackageManager
 import android.location.Location
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import android.provider.UserDictionary.Words.APP_ID
+import android.text.InputType
+import android.view.Menu
+import android.view.MenuItem
+import android.widget.EditText
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.preference.PreferenceManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -14,7 +18,9 @@ import com.bumptech.glide.Glide
 import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
+import com.hybcode.weather.core.data.api.ApiConstants.CITY_NAME_URL
 import com.hybcode.weather.core.data.api.ApiConstants.GEO_COORDINATES_URL
+import com.hybcode.weather.core.data.api.ApiConstants.KEY
 import com.hybcode.weather.databinding.ActivityMainBinding
 import org.json.JSONObject
 import java.io.BufferedReader
@@ -38,6 +44,57 @@ class MainActivity : AppCompatActivity() {
         sharedPreferences = PreferenceManager.getDefaultSharedPreferences(this)
         binding.fab.setOnClickListener {
             getLocation()
+        }
+        binding.root.setOnRefreshListener {
+            refreshData()
+        }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.main, menu)
+        return super.onCreateOptionsMenu(menu)
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        when (item.itemId) {
+            R.id.refresh -> {
+                binding.root.isRefreshing = true
+                refreshData()
+            }
+            R.id.change_city -> showInputDialog()
+        }
+        return super.onOptionsItemSelected(item)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        binding.root.isRefreshing = true
+        refreshData()
+    }
+
+    private fun refreshData() {
+        when (val location = sharedPreferences.getString("location", null)) {
+            null, "currentLocation" -> getLocation()
+            else -> updateWeatherData("$CITY_NAME_URL$location")
+        }
+        binding.root.isRefreshing = false
+    }
+
+    private fun showInputDialog() {
+        val input = EditText(this@MainActivity)
+        input.inputType = InputType.TYPE_CLASS_TEXT
+        AlertDialog.Builder(this).apply {
+            setTitle(getString(R.string.change_city))
+            setView(input)
+            setPositiveButton(getString(R.string.go)) { _, _ ->
+                val city = input.text.toString()
+                updateWeatherData("$CITY_NAME_URL$city")
+                sharedPreferences.edit().apply {
+                    putString("location", city)
+                    apply()
+                }
+            }
+            show()
         }
     }
 
@@ -87,7 +144,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun getJSON(apiCall: String): JSONObject? {
         try {
-            val con = URL("$apiCall&appid=$APP_ID&units=metric").openConnection() as HttpURLConnection
+            val con = URL("$apiCall&appid=$KEY&units=metric").openConnection() as HttpURLConnection
             con.apply {
                 doOutput = true
                 connect()
